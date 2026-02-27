@@ -135,6 +135,7 @@ void* my_realloc(void* ptr, size_t new_size) {
     if (new_size > mb->block_size && mb->next_b != NULL && !mb->next_b->is_allocated && mb->block_size + mb->next_b->block_size + sizeof(mem_block) >= new_size
         && (char*)mb + sizeof(mem_block) + mb->block_size == (char*)mb->next_b) {
         mb->block_size += (mb->next_b->block_size + sizeof(mem_block));
+        if (mb->next_b == block_tail) block_tail = mb; // check if the block we're merging is the list tail and update the tail accordingly
         mb->next_b = mb->next_b->next_b;
         if (pthread_mutex_unlock(&mutex)) return NULL;
         return ptr;
