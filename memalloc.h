@@ -89,6 +89,7 @@ void* my_malloc(size_t size) {
 }
 
 void my_free(void* ptr) {
+    if (ptr == NULL) return;
     mem_block* mb = (mem_block*)ptr - 1; // under the assumption that the user passed the correct address to free!
     if (pthread_mutex_lock(&mutex)) return;
     mb->is_allocated = 0;
@@ -105,19 +106,22 @@ void my_free(void* ptr) {
 
 void* my_realloc(void* ptr, size_t new_size) {
 
+    if (ptr == NULL) return my_malloc(new_size); // standard behaviour
+
     if (pthread_mutex_lock(&mutex)) return NULL;
 
     if (block_head == NULL) block_tail = NULL;
-
-    mem_block* mb = (mem_block*)ptr - 1;
-
-    new_size = (new_size + PLATFORM_BYTE_ALIGNMENT - 1) & ~(PLATFORM_BYTE_ALIGNMENT-1); // memory alignment 
 
     if (new_size > SIZE_MAX - sizeof(mem_block)) { 
         pthread_mutex_unlock(&mutex);
         return NULL;
     }
-    else if (new_size == 0) {
+
+    mem_block* mb = (mem_block*)ptr - 1; // we once again assume that the user has passed a previously allocated block
+
+    new_size = (new_size + PLATFORM_BYTE_ALIGNMENT - 1) & ~(PLATFORM_BYTE_ALIGNMENT-1); // memory alignment 
+ 
+    if (new_size == 0) {
         pthread_mutex_unlock(&mutex);
         my_free(ptr);
         return NULL;
@@ -128,7 +132,8 @@ void* my_realloc(void* ptr, size_t new_size) {
         return ptr; // no need to modify the block
     }
 
-    if (new_size > mb->block_size && mb->next_b != NULL && !mb->next_b->is_allocated && mb->block_size + mb->next_b->block_size + sizeof(mem_block) >= new_size) {
+    if (new_size > mb->block_size && mb->next_b != NULL && !mb->next_b->is_allocated && mb->block_size + mb->next_b->block_size + sizeof(mem_block) >= new_size
+        && (char*)mb + sizeof(mem_block) + mb->block_size == (char*)mb->next_b) {
         mb->block_size += (mb->next_b->block_size + sizeof(mem_block));
         mb->next_b = mb->next_b->next_b;
         if (pthread_mutex_unlock(&mutex)) return NULL;
